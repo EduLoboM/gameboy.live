@@ -2,8 +2,9 @@ package gb
 
 import (
 	"fmt"
-	"github.com/HFO4/gbc-in-cloud/util"
 	"log"
+
+	"github.com/HFO4/gbc-in-cloud/util"
 )
 
 type CPU struct {
@@ -13,14 +14,15 @@ type CPU struct {
 }
 
 /*
-	Registers
-	  16bit Hi   Lo   Name/Function
-	  AF    A    -    Accumulator & Flags
-	  BC    B    C    BC
-	  DE    D    E    DE
-	  HL    H    L    HL
-	  SP    -    -    Stack Pointer
-	  PC    -    -    Program Counter/Pointer
+Registers
+
+	16bit Hi   Lo   Name/Function
+	AF    A    -    Accumulator & Flags
+	BC    B    C    BC
+	DE    D    E    DE
+	HL    H    L    HL
+	SP    -    -    Stack Pointer
+	PC    -    -    Program Counter/Pointer
 */
 type Registers struct {
 	A  byte
@@ -35,14 +37,16 @@ type Registers struct {
 }
 
 /*
-	The Flag Register (lower 8bit of AF register)
-	  Bit  Name  Set Clr  Expl.
-	  7    zf    Z   NZ   Zero Flag
-	  6    n     -   -    Add/Sub-Flag (BCD)
-	  5    h     -   -    Half Carry Flag (BCD)
-	  4    cy    C   NC   Carry Flag
-	  3-0  -     -   -    Not used (always zero)
-	Contains the result from the recent instruction which has affected flags.
+The Flag Register (lower 8bit of AF register)
+
+	Bit  Name  Set Clr  Expl.
+	7    zf    Z   NZ   Zero Flag
+	6    n     -   -    Add/Sub-Flag (BCD)
+	5    h     -   -    Half Carry Flag (BCD)
+	4    cy    C   NC   Carry Flag
+	3-0  -     -   -    Not used (always zero)
+
+Contains the result from the recent instruction which has affected flags.
 */
 type Flags struct {
 	Zero      bool
@@ -75,7 +79,7 @@ func (core *Core) initCPU() {
 		HL=$014D
 		Stack Pointer=$FFFE
 	*/
-	core.CPU.Registers.A = 0x01
+	core.CPU.Registers.A = 0x11
 	core.CPU.Registers.B = 0x00
 	core.CPU.Registers.C = 0x13
 	core.CPU.Registers.D = 0x00
@@ -88,7 +92,7 @@ func (core *Core) initCPU() {
 }
 
 /*
-	Execute the next  OPCode and return used CPU clock
+Execute the next  OPCode and return used CPU clock
 */
 func (core *Core) ExecuteNextOPCode() int {
 	opcode := core.ReadMemory(core.CPU.Registers.PC)
@@ -97,7 +101,7 @@ func (core *Core) ExecuteNextOPCode() int {
 }
 
 /*
-	Break execution and print register/dump memory information for debug purpose.
+Break execution and print register/dump memory information for debug purpose.
 */
 func (core *Core) Break(code byte) {
 	af := core.CPU.getAF()
@@ -114,7 +118,7 @@ func (core *Core) Break(code byte) {
 }
 
 /*
-	Execute given OPCode and return used CPU clock
+Execute given OPCode and return used CPU clock
 */
 func (core *Core) ExecuteOPCode(code byte) int {
 	if OPCodeFunctionMap[code].Clock != 0 {
@@ -138,7 +142,7 @@ func (core *Core) ExecuteOPCode(code byte) int {
 }
 
 /*
-	Get 16bit parameter after OpCode
+Get 16bit parameter after OpCode
 */
 func (core *Core) getParameter16() uint16 {
 	b1 := uint16(core.ReadMemory(core.CPU.Registers.PC))
@@ -148,42 +152,42 @@ func (core *Core) getParameter16() uint16 {
 }
 
 /*
-	Set value of register A
+Set value of register A
 */
 func (core *Core) setA(val byte) {
 	core.CPU.Registers.A = val
 }
 
 /*
-	Set value of register B
+Set value of register B
 */
 func (core *Core) setB(val byte) {
 	core.CPU.Registers.B = val
 }
 
 /*
-	Set value of register C
+Set value of register C
 */
 func (core *Core) setC(val byte) {
 	core.CPU.Registers.C = val
 }
 
 /*
-	Set value of register D
+Set value of register D
 */
 func (core *Core) setD(val byte) {
 	core.CPU.Registers.D = val
 }
 
 /*
-	Set value of register D
+Set value of register D
 */
 func (core *Core) setE(val byte) {
 	core.CPU.Registers.E = val
 }
 
 /*
-	Set value of register H
+Set value of register H
 */
 func (core *Core) setH(val byte) {
 	core.CPU.Registers.HL &= 0x00FF
@@ -191,7 +195,7 @@ func (core *Core) setH(val byte) {
 }
 
 /*
-	Set value of register L
+Set value of register L
 */
 func (core *Core) setL(val byte) {
 	core.CPU.Registers.HL &= 0xFF00
@@ -199,7 +203,7 @@ func (core *Core) setL(val byte) {
 }
 
 /*
-	Get 8bit parameter after opcode
+Get 8bit parameter after opcode
 */
 func (core *Core) getParameter8() byte {
 	b := core.ReadMemory(core.CPU.Registers.PC)
@@ -208,14 +212,14 @@ func (core *Core) getParameter8() byte {
 }
 
 /*
-	Get value of AF register
+Get value of AF register
 */
 func (cpu *CPU) getAF() uint16 {
 	return uint16(cpu.Registers.A)<<8 | uint16(cpu.Registers.F)
 }
 
 /*
-	Set value of AF register
+Set value of AF register
 */
 func (cpu *CPU) setAF(val uint16) {
 	cpu.Registers.A = byte((val & 0xFF00) >> 8)
@@ -223,7 +227,7 @@ func (cpu *CPU) setAF(val uint16) {
 }
 
 /*
-	Set value of BC register
+Set value of BC register
 */
 func (cpu *CPU) setBC(val uint16) {
 	cpu.Registers.B = byte((val & 0xFF00) >> 8)
@@ -231,7 +235,7 @@ func (cpu *CPU) setBC(val uint16) {
 }
 
 /*
-	Set value of DE register
+Set value of DE register
 */
 func (cpu *CPU) setDE(val uint16) {
 	cpu.Registers.D = byte((val & 0xFF00) >> 8)
@@ -239,22 +243,22 @@ func (cpu *CPU) setDE(val uint16) {
 }
 
 /*
-	Get value of BC register
+Get value of BC register
 */
 func (cpu *CPU) getBC() uint16 {
 	return uint16(cpu.Registers.B)<<8 | uint16(cpu.Registers.C)
 }
 
 /*
-	Get value of DE register
+Get value of DE register
 */
 func (cpu *CPU) getDE() uint16 {
 	return uint16(cpu.Registers.D)<<8 | uint16(cpu.Registers.E)
 }
 
 /*
-	Update Low 8bit of AF register
-	TODO: maybe this operation is useless in non-debug mode.
+Update Low 8bit of AF register
+TODO: maybe this operation is useless in non-debug mode.
 */
 func (cpu *CPU) updateAFLow() {
 	newAF := cpu.Registers.F

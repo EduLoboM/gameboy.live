@@ -471,6 +471,8 @@ func (core *Core) initRom(romPath string) {
 			CurrentROMBank: 1,
 			CurrentRAMBank: 0,
 			RAMBank:        ramData,
+			rtc:            make([]byte, 13),
+			latchedRtc:     make([]byte, 13),
 		}
 		core.Cartridge.MBC = MBC
 		core.Cartridge.Props = &CartridgeProps{
@@ -525,6 +527,6 @@ func (core *Core) initRom(romPath string) {
 	if _, ok := RamBankMap[romData[0x149]]; !ok {
 		log.Fatalf("[Cartridge] Unknown RAM size byte : %x\n", romData[0x149])
 	}
-	core.Cartridge.Props.RAMBank = RamBankMap[romData[0x148]]
+	core.Cartridge.Props.RAMBank = RamBankMap[romData[0x149]]
 	log.Printf("[Cartridge] RAM bank number: %d (%dKBytes)\n", core.Cartridge.Props.RAMBank, core.Cartridge.Props.RAMBank*8)
 }
