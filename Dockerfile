@@ -41,4 +41,4 @@ EXPOSE 1989
 
 # Comando para iniciar o servidor estático com a sua ROM
 # Substitua "pokemon_crystal.gbc" pelo nome real do seu arquivo
-CMD ["./gbdotlive", "-S", "-r", "pokemon_crystal.gbc"]
+CMD ["./gbdotlive", "-S", "-r", "pkmc (patched).gbc"]
