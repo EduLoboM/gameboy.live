@@ -37,9 +37,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+# Copy only necessary files
 COPY --from=builder /app/gbdotlive .
-# Certifique-se de que a ROM está no repositório para ser copiada
-COPY . . 
+COPY ["pkmc (patched).gbc", "."]
+COPY gb.svg .
+# Create snapshots directory
+RUN mkdir snapshots 
 
 # Exponha a porta padrão do servidor
 EXPOSE 1989
