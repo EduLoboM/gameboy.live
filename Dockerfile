@@ -44,9 +44,9 @@ COPY gb.svg .
 # Create snapshots directory
 RUN mkdir snapshots 
 
-# Exponha a porta padrão do servidor
-EXPOSE 1989
+# Expose default port
+EXPOSE 8000
 
-# Comando para iniciar o servidor estático com a sua ROM
-# Substitua "pokemon_crystal.gbc" pelo nome real do seu arquivo
-CMD ["./gbdotlive", "-S", "-r", "pkmc (patched).gbc"]
+# Command to start the static server with your ROM on port 8000
+# Substitute "pokemon_crystal.gbc" with the real name of your file
+CMD ["./gbdotlive", "-S", "-p", "8000", "-r", "pkmc (patched).gbc"]
