@@ -64,22 +64,17 @@ type Flags struct {
 func (core *Core) initCPU() {
 	log.Println("[Core] Initialize CPU flags and registers")
 
-	//Initialize flags with default value.
 	core.CPU.Flags.Zero = true
 	core.CPU.Flags.Sub = false
 	core.CPU.Flags.HalfCarry = true
 	core.CPU.Flags.Carry = true
 	core.CPU.Flags.InterruptMaster = false
 
-	/*
-		Initialize register after BIOS
-		AF=$01B0
-		BC=$0013
-		DE=$00D8
-		HL=$014D
-		Stack Pointer=$FFFE
-	*/
-	core.CPU.Registers.A = 0x11
+	if core.IsCGB {
+		core.CPU.Registers.A = 0x11
+	} else {
+		core.CPU.Registers.A = 0x01
+	}
 	core.CPU.Registers.B = 0x00
 	core.CPU.Registers.C = 0x13
 	core.CPU.Registers.D = 0x00

@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/HFO4/gbc-in-cloud/driver"
-	"github.com/HFO4/gbc-in-cloud/util"
 )
 
 type Core struct {
@@ -83,6 +82,7 @@ type Core struct {
 	Exit      bool
 	GameTitle string
 	RamPath   string
+	IsCGB     bool
 }
 
 type Timer struct {
@@ -172,72 +172,34 @@ func (core *Core) Update() {
 func (core *Core) UpdateIO(cycles int) {
 	data, reqInt := core.Serial.FetchByte(cycles)
 	if reqInt {
-		ret := core.Memory.MainMemory[0xFF02]
-		ret = util.ClearBit(ret, 7)
-		core.Memory.MainMemory[0xFF02] = ret
-		//core.Serial.SetChannelStatus(util.TestBit(ret,0),util.TestBit(ret,7))
+		core.Memory.MainMemory[0xFF02] &^= 0x80
 		core.SerialByte = data
 		core.RequestInterrupt(3)
 	}
 }
 
-/*
-Check interrupt.
-*/
 func (core *Core) Interrupt() int {
-
-	/*
-		If `EI`(Enable Interrupt) instruction was executed, Interrupt Mater Flag will
-		be enable in next execution cycle.
-	*/
 	if core.CPU.Flags.PendingInterruptEnabled {
 		core.CPU.Flags.PendingInterruptEnabled = false
 		core.CPU.Flags.InterruptMaster = true
 		return 0
 	}
 
-	/*
-		If the CPU is neither interrupted nor halted,
-		stop interrupt checking and return.
-	*/
 	if !core.CPU.Flags.InterruptMaster && !core.CPU.Halt {
 		return 0
 	}
 
-	//Check the Interrupt Master Enable Flag
-	if core.CPU.Flags.InterruptMaster || core.CPU.Halt {
-		/*
-			FF0F - IF - Interrupt Flag (R/W)
-			  Bit 0: V-Blank  Interrupt Request (INT 40h)  (1=Request)
-			  Bit 1: LCD STAT Interrupt Request (INT 48h)  (1=Request)
-			  Bit 2: Timer    Interrupt Request (INT 50h)  (1=Request)
-			  Bit 3: Serial   Interrupt Request (INT 58h)  (1=Request)
-			  Bit 4: Joypad   Interrupt Request (INT 60h)  (1=Request)
+	req := core.Memory.MainMemory[0xFF0F]
+	enabled := core.Memory.MainMemory[0xFFFF]
+	pending := req & enabled & 0x1F
+	if pending == 0 {
+		return 0
+	}
 
-		*/
-		req := core.ReadMemory(0xFF0F)
-		/*
-			FFFF - IE - Interrupt Enable (R/W)
-			  Bit 0: V-Blank  Interrupt Enable  (INT 40h)  (1=Enable)
-			  Bit 1: LCD STAT Interrupt Enable  (INT 48h)  (1=Enable)
-			  Bit 2: Timer    Interrupt Enable  (INT 50h)  (1=Enable)
-			  Bit 3: Serial   Interrupt Enable  (INT 58h)  (1=Enable)
-			  Bit 4: Joypad   Interrupt Enable  (INT 60h)  (1=Enable)
-		*/
-		enabled := core.ReadMemory(0xFFFF)
-		if req > 0 {
-			/*
-
-			 */
-			for i := 0; i < 5; i++ {
-				if util.TestBit(req, uint(i)) {
-					// Check whether this interrupt request is enabled in IE.
-					if util.TestBit(enabled, uint(i)) {
-						core.DoInterrupt(i)
-						return 20
-					}
-				}
-			}
+	for i := uint(0); i < 5; i++ {
+		if pending&(1<<i) != 0 {
+			core.DoInterrupt(int(i))
+			return 20
 		}
 	}
 	return 0
@@ -247,19 +209,15 @@ func (core *Core) Interrupt() int {
 Performing an interrupt
 */
 func (core *Core) DoInterrupt(id int) {
-
 	if !core.CPU.Flags.InterruptMaster && core.CPU.Halt {
 		core.CPU.Halt = false
 		return
 	}
 
-	// Turn off the Interrupt Master Enable Flag
 	core.CPU.Flags.InterruptMaster = false
 	core.CPU.Halt = false
 
-	req := core.ReadMemory(0xFF0F)
-	req = util.ClearBit(req, uint(id))
-	core.WriteMemory(0xFF0F, req)
+	core.Memory.MainMemory[0xFF0F] &^= 1 << uint(id)
 	// We must save the current execution address by pushing it onto the stack
 	core.StackPush(core.CPU.Registers.PC)
 
@@ -312,10 +270,7 @@ func (core *Core) UpdateTimers(cycles int) {
 Request an Interrupt.
 */
 func (core *Core) RequestInterrupt(id int) {
-	//Read the present Interrupt Flag
-	req := core.ReadMemory(0xFF0F)
-	req = util.SetBit(req, uint(id))
-	core.WriteMemory(0xFF0F, req)
+	core.Memory.MainMemory[0xFF0F] |= 1 << uint(id)
 }
 
 /*
@@ -408,8 +363,8 @@ func (core *Core) initRom(romPath string) {
 		80h - Game supports CGB functions, but works on old gameboys also.
 		C0h - Game works on CGB only (physically the same as 80h).
 	*/
-	isCGB := (romData[0x143] == 0x80 || romData[0x143] == 0xC0)
-	log.Printf("[Cartridge] CGB mode: %t\n", isCGB)
+	core.IsCGB = (romData[0x143] == 0x80 || romData[0x143] == 0xC0)
+	log.Printf("[Cartridge] CGB mode: %t\n", core.IsCGB)
 
 	/*
 		0147 - Cartridge Type
