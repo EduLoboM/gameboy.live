@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"log"
+
 	"fyne.io/fyne"
 	"fyne.io/fyne/app"
 	"fyne.io/fyne/canvas"
@@ -50,31 +51,13 @@ func (lcd *LCD) draw(w, h int) image.Image {
 	i := 0
 	for y := 0; y < 144; y++ {
 		for x := 0; x < 160; x++ {
-			r, g, b := lcd.pixels[x][y][0], lcd.pixels[x][y][1], lcd.pixels[x][y][2]
-
-			if r == 0xFF && g == 0xFF && b == 0xFF {
-				lcd.screen.Pix[i] = 0x9b
-				lcd.screen.Pix[i+1] = 0xbc
-				lcd.screen.Pix[i+2] = 0x0f
-			} else if r == 0xCC && g == 0xCC && b == 0xCC {
-				lcd.screen.Pix[i] = 0x8b
-				lcd.screen.Pix[i+1] = 0xac
-				lcd.screen.Pix[i+2] = 0x0f
-			} else if r == 0x77 && g == 0x77 && b == 0x77 {
-				lcd.screen.Pix[i] = 0x30
-				lcd.screen.Pix[i+1] = 0x62
-				lcd.screen.Pix[i+2] = 0x30
-			} else {
-				lcd.screen.Pix[i] = 0x0f
-				lcd.screen.Pix[i+1] = 0x38
-				lcd.screen.Pix[i+2] = 0x0f
-			}
+			lcd.screen.Pix[i] = lcd.pixels[x][y][0]
+			lcd.screen.Pix[i+1] = lcd.pixels[x][y][1]
+			lcd.screen.Pix[i+2] = lcd.pixels[x][y][2]
 			lcd.screen.Pix[i+3] = 0xff
-
 			i += 4
 		}
 	}
-
 	return lcd.screen
 }
 
