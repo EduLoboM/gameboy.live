@@ -1,4 +1,4 @@
-FROM golang:1.25.6-bullseye AS builder
+FROM golang:1.25.6-bookworm AS builder
 
 RUN apt-get update && apt-get install -y \
     libasound2-dev \
@@ -14,7 +14,7 @@ RUN go mod download
 COPY . .
 RUN GOEXPERIMENT=greenteagc go build -o gbdotlive main.go
 
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y \
     libasound2 \
     libgl1 \
