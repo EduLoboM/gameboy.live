@@ -4,13 +4,14 @@ import (
 	"bufio"
 	"encoding/json"
 	"flag"
+	"log"
+	"os"
+
 	"github.com/HFO4/gbc-in-cloud/driver"
 	"github.com/HFO4/gbc-in-cloud/fyne"
 	"github.com/HFO4/gbc-in-cloud/gb"
 	"github.com/HFO4/gbc-in-cloud/static"
 	"github.com/HFO4/gbc-in-cloud/stream"
-	"log"
-	"os"
 )
 
 var (
@@ -50,7 +51,8 @@ func startGUI(screen driver.DisplayDriver, control driver.ControllerDriver) {
 	core.Debug = Debug
 	core.DisplayDriver = screen
 	core.Controller = control
-	core.DrawSignal = make(chan bool)
+	core.DisplayDriver = screen
+	core.Controller = control
 	core.SpeedMultiple = 0
 	core.ToggleSound = SoundOn
 	core.Init(ROMPath)

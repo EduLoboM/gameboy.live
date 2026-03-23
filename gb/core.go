@@ -38,12 +38,14 @@ type Core struct {
 	*/
 
 	//Screen pixel data
-	Screen     [160][144][3]uint8
-	ScanLineBG [160]bool
+	Screen             *[160][144][3]uint8
+	Buffers            [2][160][144][3]uint8
+	ScanLineBG         [160]bool
+	ScanLineBGPriority [160]bool
 	//Display driver
 	DisplayDriver driver.DisplayDriver
 	// Signal to tell display driver to draw
-	DrawSignal chan bool
+	DrawSignal chan *[160][144][3]uint8
 
 	/*
 	  +++++++++++++++++++++++++++
@@ -104,8 +106,10 @@ func (core *Core) Init(romPath string) {
 	core.initMemory()
 	core.initCPU()
 	core.initCB()
+	core.Screen = &core.Buffers[0]
 	core.Controller.InitStatus(&core.JoypadStatus)
-	core.DisplayDriver.Init(&core.Screen, core.GameTitle)
+	core.DisplayDriver.Init(core.Screen, core.GameTitle)
+	core.DrawSignal = make(chan *[160][144][3]uint8)
 
 	/*
 		If debug mode is ON, we set the DebugControl to 0x0100,

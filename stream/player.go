@@ -51,7 +51,6 @@ func (player *Player) Init() bool {
 			Debug:         false,
 			DisplayDriver: Driver,
 			Controller:    new(driver.TelnetController),
-			DrawSignal:    make(chan bool),
 			SpeedMultiple: 0,
 			ToggleSound:   false,
 		}
@@ -87,8 +86,8 @@ func (player *Player) RenderWelcomeScreen() []byte {
 }
 
 /*
-	Show the welcome and game select screen, return
-	selected game ID.
+Show the welcome and game select screen, return
+selected game ID.
 */
 func (player *Player) Welcome() int {
 
@@ -145,7 +144,7 @@ func (player *Player) Welcome() int {
 }
 
 /*
-	Render select multiplayer screen
+Render select multiplayer screen
 */
 func (player *Player) RenderSelectPlayer() []byte {
 	res := "\033[2J\033[H"
@@ -166,7 +165,7 @@ func (player *Player) RenderSelectPlayer() []byte {
 }
 
 /*
-	Select multiplayer
+Select multiplayer
 */
 func (player *Player) SelectPlayer() int {
 
@@ -287,8 +286,8 @@ func (player *Player) Serve() {
 	}
 
 	// Set the display driver to TELNET
-	go player.Emulator.DisplayDriver.Run(player.Emulator.DrawSignal, func() {})
 	player.Emulator.Init((*player.GameList)[player.Selected].Path)
+	go player.Emulator.DisplayDriver.Run(player.Emulator.DrawSignal, func() {})
 	go player.Emulator.Run()
 
 	for {

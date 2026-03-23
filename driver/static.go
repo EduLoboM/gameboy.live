@@ -79,13 +79,11 @@ func (s *StaticImage) Init(pixels *[screenWidth][screenHeight][3]uint8, s2 strin
 	log.Println("[Display] Initialize static image display")
 }
 
-func (s *StaticImage) Run(drawSignal chan bool, f func()) {
+func (s *StaticImage) Run(drawSignal chan *[160][144][3]uint8, f func()) {
 	for {
-		<-drawSignal
+		screen := <-drawSignal
 		s.pixelLock.Lock()
-		if s.pixelsDirty != nil {
-			s.pixelsClean = *s.pixelsDirty
-		}
+		s.pixelsClean = *screen
 		s.pixelLock.Unlock()
 	}
 }

@@ -8,11 +8,11 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-COPY go.mod ./
+COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN GOEXPERIMENT=greenteagc go build -o gbdotlive main.go
+RUN go build -o gbdotlive main.go
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y \

@@ -1,12 +1,13 @@
 package driver
 
 import (
-	"github.com/HFO4/gbc-in-cloud/util"
-	"github.com/faiface/pixel"
-	"github.com/faiface/pixel/pixelgl"
 	"image/color"
 	"log"
 	"os"
+
+	"github.com/HFO4/gbc-in-cloud/util"
+	"github.com/faiface/pixel"
+	"github.com/faiface/pixel/pixelgl"
 )
 
 type LCD struct {
@@ -74,13 +75,13 @@ func (lcd *LCD) NewInput(b []byte) {
 
 }
 
-func (lcd *LCD) Run(drawSignal chan bool, onQuit func()) {
+func (lcd *LCD) Run(drawSignal chan *[160][144][3]uint8, onQuit func()) {
 	pixelgl.Run(func() {
 		lcd.run(drawSignal, onQuit)
 	})
 }
 
-func (lcd *LCD) run(drawSignal chan bool, onQuit func()) {
+func (lcd *LCD) run(drawSignal chan *[160][144][3]uint8, onQuit func()) {
 	cfg := pixelgl.WindowConfig{
 		Title:  lcd.title,
 		Bounds: pixel.R(0, 0, 160*3, 144*3),
@@ -101,10 +102,10 @@ func (lcd *LCD) run(drawSignal chan bool, onQuit func()) {
 
 	for {
 		// drawSignal was sent by the emulator
-		<-drawSignal
+		screen := <-drawSignal
 		for y := 0; y < 144; y++ {
 			for x := 0; x < 160; x++ {
-				colour := color.RGBA{R: lcd.pixels[x][y][0], G: lcd.pixels[x][y][1], B: lcd.pixels[x][y][2], A: 0xFF}
+				colour := color.RGBA{R: screen[x][y][0], G: screen[x][y][1], B: screen[x][y][2], A: 0xFF}
 				lcd.pixelMap.Pix[(143-y)*160+x] = colour
 			}
 		}

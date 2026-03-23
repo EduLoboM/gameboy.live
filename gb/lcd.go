@@ -51,6 +51,10 @@ func (core *Core) SetLCDStatus() {
 		core.RequestInterrupt(1)
 	}
 
+	if core.IsCGB && mode == 0 && currentMode != 0 {
+		core.doHDMABlock()
+	}
+
 	if currentLine == core.Memory.MainMemory[0xFF45] {
 		status |= 0x04
 		if status&0x40 != 0 {
@@ -82,7 +86,6 @@ func (core *Core) UpdateGraphics(cycles int) {
 		core.Timer.ScanlineCounter += 456
 
 		if currentLine == 144 {
-			core.DrawScanLine()
 			core.RequestInterrupt(0)
 		} else if currentLine > 153 {
 			core.Memory.MainMemory[0xFF44] = 0

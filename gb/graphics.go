@@ -26,6 +26,7 @@ func (core *Core) DrawScanLine() {
 func (core *Core) RenderTiles(lcdControl byte) {
 	var tileData uint16
 	var backgroundMemory uint16
+	var windowMemory uint16
 	unsig := true
 
 	scrollY := core.Memory.MainMemory[0xFF42]
@@ -46,56 +47,58 @@ func (core *Core) RenderTiles(lcdControl byte) {
 		unsig = false
 	}
 
-	if !usingWindow {
-		if testBit(lcdControl, 3) {
-			backgroundMemory = 0x9C00
-		} else {
-			backgroundMemory = 0x9800
-		}
+	// Select background memory
+	if testBit(lcdControl, 3) {
+		backgroundMemory = 0x9C00
 	} else {
-		if testBit(lcdControl, 6) {
-			backgroundMemory = 0x9C00
-		} else {
-			backgroundMemory = 0x9800
-		}
+		backgroundMemory = 0x9800
 	}
 
-	var yPos byte
-	if !usingWindow {
-		yPos = scrollY + scanline
+	// Select window memory
+	if testBit(lcdControl, 6) {
+		windowMemory = 0x9C00
 	} else {
-		yPos = scanline - windowY
+		windowMemory = 0x9800
 	}
 
-	tileRow := (uint16(yPos / 8)) * 32
 	isCGB := core.IsCGB
 	finally := int(scanline)
 	if finally < 0 || finally > 143 {
 		return
 	}
 
-	tileLine := yPos % 8
-
-	// Tile row caching: track previously loaded tile data to avoid re-reading
 	var cachedTileCol uint16 = 0xFFFF
+	var cachedIsWindow bool = false
 	var cachedData1, cachedData2 byte
 	var cachedXFlip bool
 	var cachedBgPalette byte
 	var cachedVramBank byte
+	var cachedBgPriority bool
+	var currentMemoryBase uint16
 
 	for pixel := byte(0); pixel < 160; pixel++ {
 		xPos := int(pixel + scrollX)
+		useWindowForThisPixel := usingWindow && int(pixel) >= windowX
 
-		if usingWindow && int(pixel) >= windowX {
+		var yPos byte
+		if useWindowForThisPixel {
 			xPos = int(pixel) - windowX
+			yPos = scanline - windowY
+			currentMemoryBase = windowMemory
+		} else {
+			yPos = scrollY + scanline
+			currentMemoryBase = backgroundMemory
 		}
 
-		tileCol := uint16(xPos / 8)
-		tileAddress := backgroundMemory + tileRow + tileCol
+		tileRow := (uint16(yPos / 8)) * 32
+		tileLine := yPos % 8
 
-		// Only reload tile data when we move to a new tile column
-		if tileCol != cachedTileCol {
+		tileCol := uint16(xPos / 8)
+		tileAddress := currentMemoryBase + tileRow + tileCol
+
+		if tileCol != cachedTileCol || useWindowForThisPixel != cachedIsWindow {
 			cachedTileCol = tileCol
+			cachedIsWindow = useWindowForThisPixel
 
 			var tileNum int16
 			if isCGB {
@@ -126,6 +129,7 @@ func (core *Core) RenderTiles(lcdControl byte) {
 				cachedVramBank = (tileAttr >> 3) & 0x01
 				cachedXFlip = tileAttr&0x20 != 0
 				yFlip := tileAttr&0x40 != 0
+				cachedBgPriority = tileAttr&0x80 != 0
 
 				line := tileLine
 				if yFlip {
@@ -153,6 +157,7 @@ func (core *Core) RenderTiles(lcdControl byte) {
 			colourNum |= (cachedData1 >> colourBit) & 1
 
 			core.ScanLineBG[pixel] = colourNum == 0
+			core.ScanLineBGPriority[pixel] = cachedBgPriority && colourNum != 0
 
 			c := core.Memory.BGPaletteCache[cachedBgPalette][colourNum]
 			core.Screen[pixel][finally][0] = c[0]
@@ -196,6 +201,9 @@ func (core *Core) RenderSprites(lcdControl byte) {
 		spriteY := oam[base] - 16
 		spriteX := oam[base+1] - 8
 		tileLoc := oam[base+2]
+		if use8x16 {
+			tileLoc &= 0xFE
+		}
 		attributes := oam[base+3]
 
 		if scanline < spriteY || scanline >= spriteY+ysize {
@@ -249,6 +257,9 @@ func (core *Core) RenderSprites(lcdControl byte) {
 				continue
 			}
 
+			if isCGB && core.ScanLineBGPriority[pixel] {
+				continue
+			}
 			if !core.ScanLineBG[pixel] && !priority {
 				continue
 			}
@@ -291,5 +302,10 @@ func (core *Core) GetCGBColour(colourNum byte, paletteNum byte, isSprite bool) (
 }
 
 func (core *Core) RenderScreen() {
-	core.DrawSignal <- true
+	core.DrawSignal <- core.Screen
+	if core.Screen == &core.Buffers[0] {
+		core.Screen = &core.Buffers[1]
+	} else {
+		core.Screen = &core.Buffers[0]
+	}
 }

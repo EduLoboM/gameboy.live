@@ -4,9 +4,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
-	"github.com/HFO4/gbc-in-cloud/driver"
-	"github.com/HFO4/gbc-in-cloud/gb"
-	"github.com/gorilla/websocket"
 	"image/png"
 	"io/ioutil"
 	"log"
@@ -15,6 +12,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/HFO4/gbc-in-cloud/driver"
+	"github.com/HFO4/gbc-in-cloud/gb"
+	"github.com/gorilla/websocket"
 )
 
 type StaticServer struct {
@@ -38,12 +39,11 @@ func (server *StaticServer) Run() {
 		Debug:         false,
 		DisplayDriver: server.driver,
 		Controller:    server.driver,
-		DrawSignal:    make(chan bool),
 		SpeedMultiple: 0,
 		ToggleSound:   false,
 	}
-	go core.DisplayDriver.Run(core.DrawSignal, func() {})
 	core.Init(server.GamePath)
+	go core.DisplayDriver.Run(core.DrawSignal, func() {})
 	go core.Run()
 
 	// image and control server

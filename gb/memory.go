@@ -25,10 +25,11 @@ type Memory struct {
 	BGPaletteCache     [8][4][3]uint8
 	SpritePaletteCache [8][4][3]uint8
 
-	HDMASource uint16
-	HDMADest   uint16
-	HDMAActive bool
-	HDMALength byte
+	HDMASource    uint16
+	HDMADest      uint16
+	HDMAActive    bool
+	HDMALength    byte
+	HDMARemaining int
 }
 
 func (core *Core) initMemory() {
@@ -242,16 +243,55 @@ func (core *Core) WriteMemory(address uint16, data byte) {
 }
 
 func (core *Core) doHDMA(data byte) {
+	if core.Memory.HDMAActive {
+		if data&0x80 == 0 {
+			core.Memory.HDMAActive = false
+			core.Memory.HDMALength = data | 0x80
+			return
+		}
+	}
+
 	length := int((data&0x7F)+1) * 16
+
+	if data&0x80 == 0 {
+		src := core.Memory.HDMASource
+		dst := core.Memory.HDMADest | 0x8000
+		for i := 0; i < length; i++ {
+			b := core.ReadMemory(src + uint16(i))
+			core.WriteMemory(dst+uint16(i), b)
+		}
+		core.Memory.HDMAActive = false
+		core.Memory.HDMALength = 0xFF
+	} else {
+		core.Memory.HDMAActive = true
+		core.Memory.HDMARemaining = length
+		core.Memory.HDMALength = data & 0x7F
+	}
+}
+
+func (core *Core) doHDMABlock() {
+	if !core.Memory.HDMAActive {
+		return
+	}
+
 	src := core.Memory.HDMASource
 	dst := core.Memory.HDMADest | 0x8000
 
-	for i := 0; i < length; i++ {
+	for i := 0; i < 16; i++ {
 		b := core.ReadMemory(src + uint16(i))
 		core.WriteMemory(dst+uint16(i), b)
 	}
-	core.Memory.HDMAActive = false
-	core.Memory.HDMALength = 0xFF
+
+	core.Memory.HDMASource += 16
+	core.Memory.HDMADest += 16
+	core.Memory.HDMARemaining -= 16
+
+	if core.Memory.HDMARemaining <= 0 {
+		core.Memory.HDMAActive = false
+		core.Memory.HDMALength = 0xFF
+	} else {
+		core.Memory.HDMALength = byte((core.Memory.HDMARemaining/16)-1) & 0x7F
+	}
 }
 
 func (core *Core) DoDMA(data byte) {

@@ -120,7 +120,7 @@ func (lcd *LCD) Layout(_ []fyne.CanvasObject, size fyne.Size) {
 	lcd.output.Move(fyne.NewPos(int(100*xScale), int(54*yScale)))
 }
 
-func (lcd *LCD) Run(drawSignal chan bool, onQuit func()) {
+func (lcd *LCD) Run(drawSignal chan *[160][144][3]uint8, onQuit func()) {
 	a := app.New()
 	win := a.NewWindow(fmt.Sprintf("GameBoy - %s", lcd.title))
 
@@ -129,7 +129,11 @@ func (lcd *LCD) Run(drawSignal chan bool, onQuit func()) {
 	go func() {
 		for {
 			// drawSignal was sent by the emulator
-			<-drawSignal
+			screen := <-drawSignal
+			if screen == nil {
+				break
+			}
+			lcd.pixels = screen
 
 			canvas.Refresh(lcd.output)
 		}
