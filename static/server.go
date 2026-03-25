@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -51,6 +50,10 @@ func (server *StaticServer) Run() {
 	http.HandleFunc("/stream", streamImages(server))
 	http.HandleFunc("/svg", showSVG(server))
 	http.HandleFunc("/control", newInput(server))
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
 	http.ListenAndServe(fmt.Sprintf(":%d", server.Port), nil)
 }
 
@@ -126,24 +129,12 @@ func showSVG(server *StaticServer) func(http.ResponseWriter, *http.Request) {
 }
 
 func showImage(server *StaticServer) func(http.ResponseWriter, *http.Request) {
-	lastSave := time.Now().Add(time.Duration(-1) * time.Hour)
 	return func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Cache-control", "no-cache,max-age=0")
 		w.Header().Set("Content-type", "image/png")
 		w.Header().Set("Expires", time.Now().Add(time.Duration(-1)*time.Hour).UTC().Format(http.TimeFormat))
 		img := server.driver.Render()
 		png.Encode(w, img)
-
-		// Save snapshot every 10 minutes
-		if time.Now().Sub(lastSave).Minutes() > 10 {
-			lastSave = time.Now()
-			if snapshot, err := os.Create("snapshots/" + strconv.FormatInt(time.Now().Unix(), 10) + ".png"); err == nil {
-				png.Encode(snapshot, img)
-				snapshot.Close()
-			} else {
-				fmt.Println(err)
-			}
-		}
 	}
 }
 
