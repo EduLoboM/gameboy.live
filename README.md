@@ -1,5 +1,6 @@
-# Gameboy.Live
-🕹️ `Gameboy.Live` is a Gameboy emulator written in go for learning purposes. You can simply play Gameboy games on your desktop:
+# GameBoyLive
+
+🕹️ `Gameboy.Live` is a Gameboy emulator written in go for learning purposes. You can simply play Gameboy and Gameboy Color games on your desktop:
 
 ![https://github.com/HFO4/gameboy.live/raw/master/doc/screenshot.png](https://github.com/HFO4/gameboy.live/raw/master/doc/screenshot.png)
 
@@ -11,7 +12,7 @@ telnet gameboy.live 1989
 
 ![https://github.com/HFO4/gameboy.live/raw/master/doc/cloud-gaming.gif](https://github.com/HFO4/gameboy.live/raw/master/doc/cloud-gaming.gif)
 
-Even play with other visitors together on [someone's GitHub profile](https://github.com/HFO4):
+Even play with other visitors together on [EduLoboM](https://github.com/EduLoboM):
 
 ![https://user-images.githubusercontent.com/16058869/97843755-cff68580-1d24-11eb-85ef-ca9ae3f2f195.gif](https://user-images.githubusercontent.com/16058869/97843755-cff68580-1d24-11eb-85ef-ca9ae3f2f195.gif)
 
@@ -63,14 +64,14 @@ A `gamelist.json` config file is required to specify game options. This is a typ
 
 ```json
 [{
-	"Title": "Tetris",
-	"Path": "test.gb"
+ "Title": "Tetris",
+ "Path": "test.gb"
 }, {
-	"Title": "Dr. Mario",
-	"Path": "Dr. Mario (JU) (V1.1).gb"
+ "Title": "Dr. Mario",
+ "Path": "Dr. Mario (JU) (V1.1).gb"
 }, {
-	"Title": "Legend of Zelda - Link's Awakening",
-	"Path": "Legend of Zelda, The - Link's Awakening (U) (V1.2) [!].gb"
+ "Title": "Legend of Zelda - Link's Awakening",
+ "Path": "Legend of Zelda, The - Link's Awakening (U) (V1.2) [!].gb"
 }]
 
 ```
@@ -112,6 +113,28 @@ A HTTP server will start up on default port `1989`, these HTTP routes is avaliab
 | `/image`                                              | GET    | Show the latest game screenshot.                             |
 | `/svg?callback=[Redirect URL]`                        | GET    | Show the latest game screenshot with Gameboy style border and clickable gamepad. An SVG template `gb.svg` is required. |
 | `/control?button=[Button ID]&callback=[Redirect URL]` | GET    | Send new gamepad input.                                      |
+| `/save/download`                                      | GET    | Download the current `.sav` file directly in browser.        |
+| `/save/upload`                                        | POST   | Upload/restore a `.sav` file.                                |
+| `/health`                                             | GET    | Health check endpoint (returns 200 OK).                      |
+
+#### Save Persistence in Cloud (Koyeb / Docker / Gist)
+
+To avoid losing your save progress when hosting in ephemeral cloud environments (like Koyeb):
+
+1. **Option A: GitHub Gist Auto-Sync (Recommended)**
+   - Create a Secret Gist on GitHub (with an initial empty file, e.g. `game.gbc.sav`).
+   - Create a GitHub Personal Access Token (classic) with `gist` scope.
+   - Set the following Environment Variables on Koyeb / Docker:
+     - `GITHUB_TOKEN`: Your GitHub token.
+     - `GIST_ID`: Your Gist ID from the URL (e.g. `d3b07384d113edec49eaa6238ad5ff00`).
+     - `GIST_FILENAME` *(optional)*: Name of the save file (defaults to `game.gbc.sav`).
+   - The server will automatically download the latest save on boot and upload changes asynchronously whenever the game saves!
+
+2. **Option B: Persistent Volume**
+   - Mount a Koyeb Persistent Volume (e.g. at `/data`).
+   - Set Environment Variable:
+     - `SAVE_DIR=/data`
+   - The `.sav` file will be stored directly in the persistent disk.
 
 #### WebSockets streaming
 
@@ -122,14 +145,14 @@ Make sure the static server above is already started up on default port `1989`.
 - Use `ws://localhost:1989/stream` route in order to start a websocket communication channel.
 - Images will be streamed to the client in PNG encoding.
 - The client can send their input commands in text format using one of these codes:
-    - Right Arrow: `0` 
-    - Left Arrow: `1`
-    - Up Arrow: `2`
-    - Down Arrow: `3`
-    - A: `4`
-    - B: `5`
-    - Select: `6`
-    - Start: `7`
+  - Right Arrow: `0`
+  - Left Arrow: `1`
+  - Up Arrow: `2`
+  - Down Arrow: `3`
+  - A: `4`
+  - B: `5`
+  - Select: `6`
+  - Start: `7`
 - check out `client_demo.html` for a simple demo and don't forget to run the server before by using the command above &#x1F31D;
 
 ### Debug
@@ -166,21 +189,21 @@ LCD:100
 
 - [x] CPU instruction emulation
 - [x] Timer and interrupt
-- [x] Support for ROM-only, MBC1, MBC2, MBC3 cartridge
+- [x] Support for ROM-only, MBC1, MBC2, MBC3, MBC5 cartridge
+- [x] Support Gameboy Color (GBC) emulation
 - [x] Sound emulation
 - [x] Graphics emulation
-- [x] Cloud gaming
+- [x] Cloud gaming (Telnet & HTTP / SVG)
+- [x] Cloud save persistence & auto-sync (GitHub Gist & Volumes)
 - [x] ROM debugger
 - [x] Game saving & restore in cartridge level
 
-There are still many TODOs：
+There are still some TODOs：
 
-- [ ] Support Gameboy Color emulation
-- [ ] Support for MBC4, MBC5, HuC1 cartridge
-- [ ] Sound simulation is incomplete, still got differences compared to the Gameboy real machine
-- [ ] Sprite priority issue (see `Wario Land II` and `Metroid II: Return of Samus`)
-- [ ] Failed to pass Blargg's instruction timing test
-- [ ] Game saving & restore in emulator level
+- [ ] Support for MBC4, HuC1 cartridge
+- [ ] Sound simulation improvements (refine nuances compared to real hardware)
+- [ ] Sprite priority adjustments for edge-case titles
+- [ ] Instruction timing test suite completion (Blargg)
 - [ ] Multiplayer support in cloud gaming mode
 
 ## Testing
@@ -195,16 +218,17 @@ This emulator is just for learning and entertainment purposes. There are still m
 
 Thanks:
 
-* [szymonWojdat](https://github.com/szymonWojdat) Adding a WebSockets implementation.
-* [andydotxyz](https://github.com/andydotxyz) Adding Fyne GUI driver and saving support for cartridges, also fixing some bugs.
-* [maxolasersquad](https://github.com/maxolasersquad) and [tilkinsc](https://github.com/tilkinsc) Polishing README and documents.
+- [HFO4](https://github.com/HFO4) Creator of the original [gameboy.live](https://github.com/HFO4/gameboy.live) project.
+- [szymonWojdat](https://github.com/szymonWojdat) Adding a WebSockets implementation.
+- [andydotxyz](https://github.com/andydotxyz) Adding Fyne GUI driver and saving support for cartridges, also fixing some bugs.
+- [maxolasersquad](https://github.com/maxolasersquad) and [tilkinsc](https://github.com/tilkinsc) Polishing README and documents.
 
 ## Reference
 
-* [Pan Docs](http://bgb.bircd.org/pandocs.htm)
-* [http://www.codeslinger.co.uk/pages/projects/gameboy/beginning.html](http://www.codeslinger.co.uk/pages/projects/gameboy/beginning.html)
-* [http://www.devrs.com/gb/files/GBCPU_Instr.html](http://www.devrs.com/gb/files/GBCPU_Instr.html)
-* [https://github.com/Humpheh/goboy](https://github.com/Humpheh/goboy)
-* [The Ultimate Game Boy Talk (33c3)](https://www.youtube.com/watch?v=HyzD8pNlpwI)
-* [http://gameboy.mongenel.com/dmg/asmmemmap.html](http://gameboy.mongenel.com/dmg/asmmemmap.html)
-* ......
+- [Pan Docs](http://bgb.bircd.org/pandocs.htm)
+- [http://www.codeslinger.co.uk/pages/projects/gameboy/beginning.html](http://www.codeslinger.co.uk/pages/projects/gameboy/beginning.html)
+- [http://www.devrs.com/gb/files/GBCPU_Instr.html](http://www.devrs.com/gb/files/GBCPU_Instr.html)
+- [https://github.com/Humpheh/goboy](https://github.com/Humpheh/goboy)
+- [The Ultimate Game Boy Talk (33c3)](https://www.youtube.com/watch?v=HyzD8pNlpwI)
+- [http://gameboy.mongenel.com/dmg/asmmemmap.html](http://gameboy.mongenel.com/dmg/asmmemmap.html)
+- ......
