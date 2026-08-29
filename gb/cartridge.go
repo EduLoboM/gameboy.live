@@ -2,6 +2,7 @@ package gb
 
 import (
 	"bufio"
+	"io"
 	"log"
 	"os"
 
@@ -64,7 +65,7 @@ ROM bank number is linked to the ROM Size byte (0148).
 
 0x00 means no bank required.
 */
-var RomBankMap = map[byte]uint8{
+var RomBankMap = map[byte]uint16{
 	byte(0x00): 2,
 	byte(0x01): 4,
 	byte(0x02): 8,
@@ -72,6 +73,7 @@ var RomBankMap = map[byte]uint8{
 	byte(0x04): 32,
 	byte(0x05): 64,
 	byte(0x06): 128,
+	byte(0x07): 256,
 	byte(0x52): 72,
 	byte(0x53): 80,
 	byte(0x54): 96,
@@ -89,6 +91,8 @@ var RamBankMap = map[byte]uint8{
 	byte(0x01): 1,
 	byte(0x02): 1,
 	byte(0x03): 4,
+	byte(0x04): 16,
+	byte(0x05): 8,
 }
 
 type Cartridge struct {
@@ -102,7 +106,7 @@ Cartridge props
 type CartridgeProps struct {
 	MBCType   string
 	ROMLength int
-	ROMBank   uint8
+	ROMBank   uint16
 	RAMBank   uint8
 }
 
@@ -113,6 +117,7 @@ type MBC interface {
 	WriteRamBank(uint16, byte)
 	HandleBanking(uint16, byte)
 	SaveRam(string)
+	Tick(int)
 }
 
 /*
@@ -169,6 +174,9 @@ func (mbc *MBCRom) HandleBanking(address uint16, val byte) {
 }
 
 func (mbc *MBCRom) SaveRam(path string) {
+}
+
+func (mbc *MBCRom) Tick(cycles int) {
 }
 
 /*	Single ROM without MBC  END
@@ -335,6 +343,9 @@ func (mbc *MBC1) SaveRam(path string) {
 	writeRamFile(path, mbc.RAMBank)
 }
 
+func (mbc *MBC1) Tick(cycles int) {
+}
+
 /*
 		MBC1  END
 	====================================
@@ -461,6 +472,9 @@ func (mbc *MBC2) SaveRam(path string) {
 	writeRamFile(path, mbc.RAMBank)
 }
 
+func (mbc *MBC2) Tick(cycles int) {
+}
+
 /*
 		MBC2  END
 	====================================
@@ -481,31 +495,50 @@ type MBC3 struct {
 	rtc        []byte
 	latchedRtc []byte
 	latched    bool
+	rtcCycles  int
 }
 
 func (mbc *MBC3) ReadRomBank(address uint16) byte {
 	newAddress := uint32(address - 0x4000)
-	return mbc.rom[newAddress+uint32(mbc.CurrentROMBank)*0x4000]
+	offset := newAddress + uint32(mbc.CurrentROMBank)*0x4000
+	if int(offset) < len(mbc.rom) {
+		return mbc.rom[offset]
+	}
+	return 0xFF
 }
 
 func (mbc *MBC3) ReadRamBank(address uint16) byte {
-	if mbc.CurrentRAMBank >= 0x4 {
-		if mbc.latched {
-			return mbc.latchedRtc[mbc.CurrentRAMBank]
+	if mbc.CurrentRAMBank >= 0x08 && mbc.CurrentRAMBank <= 0x0C {
+		if int(mbc.CurrentRAMBank) < len(mbc.rtc) {
+			if mbc.latched && int(mbc.CurrentRAMBank) < len(mbc.latchedRtc) {
+				return mbc.latchedRtc[mbc.CurrentRAMBank]
+			}
+			return mbc.rtc[mbc.CurrentRAMBank]
 		}
-		return mbc.rtc[mbc.CurrentRAMBank]
+		return 0xFF
 	}
-	newAddress := uint32(address - 0xA000)
-	return mbc.RAMBank[newAddress+(uint32(mbc.CurrentRAMBank)*0x2000)]
+	if mbc.CurrentRAMBank <= 0x07 {
+		newAddress := uint32(address - 0xA000)
+		offset := newAddress + (uint32(mbc.CurrentRAMBank) * 0x2000)
+		if int(offset) < len(mbc.RAMBank) {
+			return mbc.RAMBank[offset]
+		}
+	}
+	return 0xFF
 }
 
 func (mbc *MBC3) WriteRamBank(address uint16, data byte) {
 	if mbc.EnableRAM {
-		if mbc.CurrentRAMBank >= 0x4 {
-			mbc.rtc[mbc.CurrentRAMBank] = data
-		} else {
+		if mbc.CurrentRAMBank >= 0x08 && mbc.CurrentRAMBank <= 0x0C {
+			if int(mbc.CurrentRAMBank) < len(mbc.rtc) {
+				mbc.rtc[mbc.CurrentRAMBank] = data
+			}
+		} else if mbc.CurrentRAMBank <= 0x07 {
 			newAddress := uint32(address - 0xA000)
-			mbc.RAMBank[newAddress+(uint32(mbc.CurrentRAMBank)*0x2000)] = data
+			offset := newAddress + (uint32(mbc.CurrentRAMBank) * 0x2000)
+			if int(offset) < len(mbc.RAMBank) {
+				mbc.RAMBank[offset] = data
+			}
 		}
 	}
 }
@@ -559,8 +592,8 @@ func (mbc *MBC3) HandleBanking(address uint16, val byte) {
 }
 
 func (mbc *MBC3) DoRamBankEnable(address uint16, val byte) {
-	testData := val & 0xA
-	if testData != 0 {
+	testData := val & 0xF
+	if testData == 0x0A {
 		mbc.EnableRAM = true
 	} else if testData == 0x0 {
 		mbc.EnableRAM = false
@@ -568,12 +601,11 @@ func (mbc *MBC3) DoRamBankEnable(address uint16, val byte) {
 }
 
 func (mbc *MBC3) DoChangeLoROMBank(val byte) {
-	lower5 := val & 0x7F
-	mbc.CurrentROMBank = lower5
-	mbc.CurrentROMBank |= lower5
-	if mbc.CurrentROMBank == 0x00 {
-		mbc.CurrentROMBank++
+	bank := val & 0xFF
+	if bank == 0x00 {
+		bank = 1
 	}
+	mbc.CurrentROMBank = bank
 }
 
 func (mbc *MBC3) DoChangeHiRomBank(val byte) {
@@ -590,16 +622,46 @@ func (mbc *MBC3) DoRAMBankChange(val byte) {
 }
 
 func (mbc *MBC3) DoChangeROMRAMMode(val byte) {
-	if val == 0x1 {
-		mbc.latched = false
-	} else if val == 0x0 {
+	if val == 0x01 {
 		mbc.latched = true
-		copy(mbc.rtc, mbc.latchedRtc)
+		copy(mbc.latchedRtc, mbc.rtc)
+	} else if val == 0x00 {
+		mbc.latched = false
 	}
 }
 
 func (mbc *MBC3) SaveRam(path string) {
 	writeRamFile(path, mbc.RAMBank)
+}
+
+func (mbc *MBC3) Tick(cycles int) {
+	mbc.rtcCycles += cycles
+	if mbc.rtcCycles >= 4194304 {
+		mbc.rtcCycles -= 4194304
+		if len(mbc.rtc) >= 13 && (mbc.rtc[0x0C]&0x40 == 0) { // Halt flag is bit 6
+			mbc.rtc[0x08]++ // Seconds
+			if mbc.rtc[0x08] >= 60 {
+				mbc.rtc[0x08] = 0
+				mbc.rtc[0x09]++ // Minutes
+				if mbc.rtc[0x09] >= 60 {
+					mbc.rtc[0x09] = 0
+					mbc.rtc[0x0A]++ // Hours
+					if mbc.rtc[0x0A] >= 24 {
+						mbc.rtc[0x0A] = 0
+						// Day counter (9-bit: lower 8 in 0x0B, MSB in bit 0 of 0x0C)
+						day := uint16(mbc.rtc[0x0B]) | (uint16(mbc.rtc[0x0C]&1) << 8)
+						day++
+						mbc.rtc[0x0B] = byte(day & 0xFF)
+						if day > 0x1FF {
+							mbc.rtc[0x0C] |= 0x80 // Day carry
+							day %= 512
+						}
+						mbc.rtc[0x0C] = (mbc.rtc[0x0C] & 0xFE) | byte((day>>8)&1)
+					}
+				}
+			}
+		}
+	}
 }
 
 /*
@@ -681,10 +743,10 @@ func (mbc *MBC5) HandleBanking(address uint16, val byte) {
 }
 
 func (mbc *MBC5) DoRamBankEnable(address uint16, val byte) {
-	testData := val & 0xA
-	if testData != 0 {
+	testData := val & 0xF
+	if testData == 0x0A {
 		mbc.EnableRAM = true
-	} else if testData == 0x0 {
+	} else {
 		mbc.EnableRAM = false
 	}
 }
@@ -698,11 +760,14 @@ func (mbc *MBC5) DoChangeHiRomBank(val byte) {
 }
 
 func (mbc *MBC5) DoRAMBankChange(val byte) {
-	mbc.CurrentRAMBank = val
+	mbc.CurrentRAMBank = val & 0x0F
 }
 
 func (mbc *MBC5) SaveRam(path string) {
 	writeRamFile(path, mbc.RAMBank)
+}
+
+func (mbc *MBC5) Tick(cycles int) {
 }
 
 /*
@@ -741,7 +806,10 @@ func readDataFile(path string, ram bool) []byte {
 	bytes := make([]byte, size)
 
 	bufReader := bufio.NewReader(romFile)
-	_, err = bufReader.Read(bytes)
+	_, err = io.ReadFull(bufReader, bytes)
+	if err != nil {
+		log.Fatalf("[Core] Failed to read %s file completely: %v", name, err)
+	}
 
 	log.Println("[Core]", size, "Bytes", name, "loaded")
 	return bytes
@@ -754,14 +822,19 @@ func (core *Core) readRamFile(ramPath string) []byte {
 func writeRamFile(ramPath string, data []byte) {
 	ramFile, err := os.Create(ramPath)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("[Core] Warning: Failed to create RAM file %s: %v\n", ramPath, err)
+		return
 	}
 	defer ramFile.Close()
 
 	bufWriter := bufio.NewWriter(ramFile)
 	size, err := bufWriter.Write(data)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("[Core] Warning: Failed to write RAM data to %s: %v\n", ramPath, err)
+		return
+	}
+	if err := bufWriter.Flush(); err != nil {
+		log.Printf("[Core] Warning: Failed to flush RAM data: %v\n", err)
 	}
 	log.Printf("[Core] %d Bytes ram written\n", size)
 }

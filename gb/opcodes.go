@@ -1309,7 +1309,7 @@ func (core *Core) OP39() int {
 	res := int32(originSP) + int32(originHL)
 	core.CPU.Registers.HL = uint16(res)
 	core.CPU.Flags.Sub = false
-	core.CPU.Flags.HalfCarry = int32(originHL&0xFFF) > (res & 0xFFF)
+	core.CPU.Flags.HalfCarry = (originHL&0xFFF)+(originSP&0xFFF) > 0xFFF
 	core.CPU.Flags.Carry = res > 0xFFFF
 	core.CPU.updateAFLow()
 	return 0
@@ -1342,7 +1342,7 @@ func (core *Core) OP29() int {
 	res := int32(originHL) + int32(originHL)
 	core.CPU.Registers.HL = uint16(res)
 	core.CPU.Flags.Sub = false
-	core.CPU.Flags.HalfCarry = int32(originHL&0xFFF) > (res & 0xFFF)
+	core.CPU.Flags.HalfCarry = (originHL&0xFFF)+(originHL&0xFFF) > 0xFFF
 	core.CPU.Flags.Carry = res > 0xFFFF
 	core.CPU.updateAFLow()
 	return 0
@@ -1423,7 +1423,19 @@ func (core *Core) OP15() int {
 	OP:0x10 STOP 0
 */
 func (core *Core) OP10() int {
-	//TODO STOP
+	core.getParameter8() // STOP is a 2-byte opcode, consume the second byte
+	if core.IsCGB {
+		if core.Memory.MainMemory[0xFF4D]&0x01 != 0 {
+			// Toggle speed mode
+			if core.SpeedMultiple == 0 {
+				core.SpeedMultiple = 1
+				core.Memory.MainMemory[0xFF4D] = 0x80 // bit 7 = current speed (1=double)
+			} else {
+				core.SpeedMultiple = 0
+				core.Memory.MainMemory[0xFF4D] = 0x00 // bit 7 = current speed (0=normal)
+			}
+		}
+	}
 	return 0
 }
 
@@ -1954,7 +1966,7 @@ func (core *Core) OP09() int {
 	res := int32(originBC) + int32(originHL)
 	core.CPU.Registers.HL = uint16(res)
 	core.CPU.Flags.Sub = false
-	core.CPU.Flags.HalfCarry = int32(originHL&0xFFF) > (res & 0xFFF)
+	core.CPU.Flags.HalfCarry = (originHL&0xFFF)+(originBC&0xFFF) > 0xFFF
 	core.CPU.Flags.Carry = res > 0xFFFF
 	core.CPU.updateAFLow()
 	return 0
@@ -2138,7 +2150,7 @@ func (core *Core) OP19() int {
 	core.CPU.Registers.HL = uint16(res)
 
 	core.CPU.Flags.Sub = false
-	core.CPU.Flags.HalfCarry = int32(originHL&0xFFF) > (res & 0xFFF)
+	core.CPU.Flags.HalfCarry = (originHL&0xFFF)+(originDE&0xFFF) > 0xFFF
 	core.CPU.Flags.Carry = res > 0xFFFF
 	core.CPU.updateAFLow()
 	return 0

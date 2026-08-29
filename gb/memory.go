@@ -1,8 +1,8 @@
 package gb
 
 import (
-	"io/ioutil"
 	"log"
+	"os"
 	"time"
 
 	"github.com/HFO4/gbc-in-cloud/util"
@@ -85,6 +85,7 @@ func (core *Core) SaveRAM() {
 	if core.Memory.dirty {
 		core.Memory.dirty = false
 		core.Cartridge.MBC.SaveRam(core.RamPath)
+		util.TriggerSaveSync(core.RamPath)
 	}
 }
 
@@ -170,7 +171,7 @@ func (core *Core) WriteMemory(address uint16, data byte) {
 	} else if (address >= 0xE000) && (address < 0xFE00) {
 		core.Memory.MainMemory[address] = data
 		core.WriteMemory(address-0x2000, data)
-	} else if (address >= 0xFEA0) && (address < 0xFEFF) {
+	} else if (address >= 0xFEA0) && (address < 0xFF00) {
 		// restricted
 	} else if 0xFF04 == address {
 		core.Memory.MainMemory[0xFF04] = 0
@@ -322,7 +323,7 @@ func (core *Core) StackPop() uint16 {
 }
 
 func (memory *Memory) Dump(path string) {
-	err := ioutil.WriteFile(path, memory.MainMemory[:], 0644)
+	err := os.WriteFile(path, memory.MainMemory[:], 0644)
 	if err != nil {
 		panic(err)
 	}

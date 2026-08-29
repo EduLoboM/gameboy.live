@@ -156,10 +156,11 @@ func (sound *Sound) Trigger(address uint16, val byte, vram []byte) {
 	//log.Printf("new Sound:%X : %X tick:%d\n", address, val,sound.Channel2.sampleTick)
 	if address >= 0xFF30 {
 		count := 0
-		for i := 0; i < 0xF; i++ {
+		for i := 0; i < 0x10; i++ {
 			sound.SampleCache[count] = float64(vram[0x20+i]>>4) / float64(0xf)
 			count++
 			sound.SampleCache[count] = float64(vram[0x20+i]&0xF) / float64(0xf)
+			count++
 		}
 	}
 	switch address {
@@ -439,12 +440,12 @@ func (channel *Channel) Sweep() {
 	if channel.sweepNumber > 0 {
 		if channel.sweepTick-channel.lastSweep >= sweepTime[channel.sweepTime] {
 			if channel.Freq > 0 {
-				newFreq := 0
-				if channel.sweepIncrease {
-					newFreq = channel.freqLast + channel.freqLast/2 ^ int(channel.sweepNumber)
-				} else {
-					newFreq = channel.freqLast - channel.freqLast/2 ^ int(channel.sweepNumber)
-				}
+			newFreq := 0
+			if channel.sweepIncrease {
+				newFreq = channel.freqLast + (channel.freqLast >> uint(channel.sweepNumber))
+			} else {
+				newFreq = channel.freqLast - (channel.freqLast >> uint(channel.sweepNumber))
+			}
 				channel.freqLast = newFreq
 				channel.Freq = 131072 / (2048 - int(newFreq))
 				channel.lastSweep = channel.sweepTick

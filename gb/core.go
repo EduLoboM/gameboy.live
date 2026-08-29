@@ -2,9 +2,12 @@ package gb
 
 import (
 	"log"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/HFO4/gbc-in-cloud/driver"
+	"github.com/HFO4/gbc-in-cloud/util"
 )
 
 type Core struct {
@@ -98,6 +101,7 @@ func (core *Core) Init(romPath string) {
 	core.SpeedMultiple = 0
 	core.Timer.TimerCounter = 0
 	core.Timer.DividerRegister = 0
+	core.Timer.ScanlineCounter = 456
 	core.JoypadStatus = 0xFF
 	core.SerialByte = 0xFF
 	core.Serial.Receive = make(chan byte)
@@ -166,6 +170,9 @@ func (core *Core) Update() {
 		cyclesThisUpdate += cycles
 		core.UpdateTimers(cycles)
 		core.UpdateGraphics(cycles)
+		if core.Cartridge.MBC != nil {
+			core.Cartridge.MBC.Tick(cycles)
+		}
 		cyclesThisUpdate += core.Interrupt()
 		core.UpdateIO(cycles)
 
@@ -257,8 +264,7 @@ func (core *Core) UpdateTimers(cycles int) {
 	if core.IsClockEnabled() {
 		core.Timer.TimerCounter += cycles
 		if core.Timer.TimerCounter >= core.GetClockFreqCount() {
-			// reset m_TimerTracer to the correct value
-			core.SetClockFreq()
+			core.Timer.TimerCounter -= core.GetClockFreqCount()
 			// timer about to overflow
 			if core.ReadMemory(0xFF05) == 255 {
 				core.WriteMemory(0xFF05, core.ReadMemory(0xFF06))
@@ -284,8 +290,8 @@ In CGB Double Speed Mode it is incremented twice as fast, ie. at 32768Hz.
 */
 func (core *Core) DoDividerRegister(cycles int) {
 	core.Timer.DividerRegister += cycles
-	if core.Timer.DividerRegister >= 255 {
-		core.Timer.DividerRegister = 0
+	if core.Timer.DividerRegister >= 256 {
+		core.Timer.DividerRegister -= 256
 		core.Memory.MainMemory[0xFF04]++
 	}
 }
@@ -343,11 +349,25 @@ func (core *Core) GetClockFreqCount() int {
 Initialize Cartridge, load rom file and decode rom props
 */
 func (core *Core) initRom(romPath string) {
-	core.RamPath = romPath + ".sav"
+	if customSave := os.Getenv("SAVE_PATH"); customSave != "" {
+		core.RamPath = customSave
+	} else if saveDir := os.Getenv("SAVE_DIR"); saveDir != "" {
+		core.RamPath = filepath.Join(saveDir, filepath.Base(romPath)+".sav")
+	} else {
+		core.RamPath = romPath + ".sav"
+	}
+
+	// Initialize cloud/Gist save sync (restoring save file if available)
+	util.InitSaveSync(core.RamPath)
+
 	romData := core.readRomFile(romPath)
 	ramData := core.readRamFile(core.RamPath)
+	// Calculate required RAM size based on RAM bank count
+	ramSize := 0x8000 // default 32KB
 	if ramData == nil {
-		ramData = make([]byte, 0x8000)
+		ramData = make([]byte, ramSize)
+	} else {
+		ramSize = len(ramData)
 	}
 
 	/*
