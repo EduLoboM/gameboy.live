@@ -119,6 +119,8 @@ func (s *StaticImage) Render() *image.RGBA {
 
 func (s *StaticImage) EnqueueInput(button byte) {
 	s.queueLock.Lock()
-	s.inputQueue = append(s.inputQueue, &inputCommand{button, 3, false})
+	if len(s.inputQueue) < 50 {
+		s.inputQueue = append(s.inputQueue, &inputCommand{button, 3, false})
+	}
 	s.queueLock.Unlock()
 }

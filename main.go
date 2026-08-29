@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/json"
 	"flag"
 	"log"
@@ -25,6 +24,8 @@ var (
 	ConfigPath string
 	ListenPort int
 	ROMPath    string
+	SaveDir    string
+	SavePath   string
 	SoundOn    bool
 	FPS        int
 	Debug      bool
@@ -42,6 +43,8 @@ func init() {
 	flag.IntVar(&FPS, "f", 60, "Set the `FPS` in GUI mode")
 	flag.StringVar(&ConfigPath, "c", "", "Set the game option list `config` file path")
 	flag.StringVar(&ROMPath, "r", "", "Set `ROM` file path to be played in GUI mode")
+	flag.StringVar(&SaveDir, "save-dir", "", "Set the directory for save files")
+	flag.StringVar(&SavePath, "save-path", "", "Set specific save file path")
 }
 
 func startGUI(screen driver.DisplayDriver, control driver.ControllerDriver) {
@@ -49,8 +52,6 @@ func startGUI(screen driver.DisplayDriver, control driver.ControllerDriver) {
 	core.FPS = FPS
 	core.Clock = 4194304
 	core.Debug = Debug
-	core.DisplayDriver = screen
-	core.Controller = control
 	core.DisplayDriver = screen
 	core.Controller = control
 	core.SpeedMultiple = 0
@@ -77,19 +78,10 @@ func runServer() {
 	}
 
 	// Read config file
-	configFile, err := os.Open(ConfigPath)
-	defer configFile.Close()
+	gameListStr, err := os.ReadFile(ConfigPath)
 	if err != nil {
 		log.Fatal("[Error] Failed to read game list config file,", err)
 	}
-	stats, statsErr := configFile.Stat()
-	if statsErr != nil {
-		log.Fatal(statsErr)
-	}
-	var size = stats.Size()
-	gameListStr := make([]byte, size)
-	bufReader := bufio.NewReader(configFile)
-	_, err = bufReader.Read(gameListStr)
 
 	streamServer := new(stream.StreamServer)
 	streamServer.Port = ListenPort
@@ -107,6 +99,13 @@ func main() {
 	if h {
 		flag.Usage()
 		return
+	}
+
+	if SaveDir != "" {
+		os.Setenv("SAVE_DIR", SaveDir)
+	}
+	if SavePath != "" {
+		os.Setenv("SAVE_PATH", SavePath)
 	}
 
 	if StreamServerMode {

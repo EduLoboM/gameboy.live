@@ -82,7 +82,7 @@ func (stream *ASCII) renderAscii(pixels [160][144]bool) {
 				if chars[charPosition] == 0x2880 {
 					ret += " "
 				} else {
-					ret += string(chars[charPosition])
+					ret += string(rune(chars[charPosition]))
 				}
 				if x%159 == 0 {
 					ret += "\r\n"
