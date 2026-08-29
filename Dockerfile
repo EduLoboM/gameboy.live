@@ -1,4 +1,4 @@
-FROM golang:1.25.6-bookworm AS builder
+FROM golang:1.27-bookworm AS builder
 
 RUN apt-get update && apt-get install -y \
     libasound2-dev \
@@ -32,7 +32,7 @@ WORKDIR /app
 COPY --from=builder /app/gbdotlive .
 COPY gb.svg .
 
-RUN mkdir snapshots 
+RUN mkdir -p snapshots /data 
 
 EXPOSE 8000
 
