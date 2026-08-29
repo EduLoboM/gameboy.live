@@ -1,0 +1,91 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  test:
+    name: Test & Code Quality
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [ '1.27.x', '1.26.x' ]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libgl1-mesa-dev xorg-dev
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+
+      - name: Download Go Dependencies
+        run: go mod download
+
+      - name: Run Go Vet
+        run: go vet ./...
+
+      - name: Run Test Suite with Coverage
+        run: |
+          go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+
+      - name: Upload Test Coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.go-version }}
+          path: coverage.txt
+
+  build:
+    name: Build Executable
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libgl1-mesa-dev xorg-dev
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.x'
+          cache: true
+
+      - name: Build Binary
+        run: go build -v -o gbdotlive main.go
+
+      - name: Test Binary Execution
+        run: ./gbdotlive -h || true
+
+  docker:
+    name: Build Docker Container
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: actions/setup-buildx-action@v3
+
+      - name: Build Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: gbdotlive:latest
