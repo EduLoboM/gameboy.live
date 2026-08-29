@@ -1,5 +1,7 @@
 package gb
 
+import "sort"
+
 var dmgPalette = [4][3]uint8{
 	{0x9b, 0xbc, 0x0f},
 	{0x8b, 0xac, 0x0f},
@@ -16,6 +18,18 @@ func (core *Core) DrawScanLine() {
 
 	if core.IsCGB || testBit(control, 0) {
 		core.RenderTiles(control)
+	} else {
+		scanline := int(core.Memory.MainMemory[0xFF44])
+		if scanline >= 0 && scanline < 144 {
+			for pixel := 0; pixel < 160; pixel++ {
+				core.ScanLineBG[pixel] = true
+				core.ScanLineBGPriority[pixel] = false
+				c := dmgPalette[0]
+				core.Screen[pixel][scanline][0] = c[0]
+				core.Screen[pixel][scanline][1] = c[1]
+				core.Screen[pixel][scanline][2] = c[2]
+			}
+		}
 	}
 
 	if testBit(control, 1) {
@@ -93,8 +107,8 @@ func (core *Core) RenderTiles(lcdControl byte) {
 		tileRow := (uint16(yPos / 8)) * 32
 		tileLine := yPos % 8
 
-		tileCol := uint16(xPos / 8)
-		tileAddress := currentMemoryBase + tileRow + tileCol
+		tileCol := uint16((xPos / 8) % 32)
+		tileAddress := currentMemoryBase + ((tileRow + tileCol) & 0x3FF)
 
 		if tileCol != cachedTileCol || useWindowForThisPixel != cachedIsWindow {
 			cachedTileCol = tileCol
@@ -183,53 +197,91 @@ func (core *Core) RenderTiles(lcdControl byte) {
 	}
 }
 
+type spriteEntry struct {
+	index      int
+	x          int
+	y          int
+	tileLoc    byte
+	attributes byte
+}
+
 func (core *Core) RenderSprites(lcdControl byte) {
 	use8x16 := testBit(lcdControl, 2)
-	scanline := core.Memory.MainMemory[0xFF44]
+	scanline := int(core.Memory.MainMemory[0xFF44])
+	if scanline > 143 {
+		return
+	}
 	isCGB := core.IsCGB
+	bgMasterPriority := testBit(lcdControl, 0)
 
-	ysize := byte(8)
+	ysize := 8
 	if use8x16 {
 		ysize = 16
 	}
 
 	oam := &core.Memory.MainMemory
-	spriteCount := 0
 
+	var spritesOnLine []spriteEntry
 	for sprite := 0; sprite < 40; sprite++ {
 		base := 0xFE00 + sprite*4
-		spriteY := oam[base] - 16
-		spriteX := oam[base+1] - 8
+		spriteY := int(oam[base]) - 16
+		spriteX := int(oam[base+1]) - 8
+
+		if scanline < spriteY || scanline >= spriteY+ysize {
+			continue
+		}
+
 		tileLoc := oam[base+2]
 		if use8x16 {
 			tileLoc &= 0xFE
 		}
 		attributes := oam[base+3]
 
-		if scanline < spriteY || scanline >= spriteY+ysize {
-			continue
-		}
+		spritesOnLine = append(spritesOnLine, spriteEntry{
+			index:      sprite,
+			x:          spriteX,
+			y:          spriteY,
+			tileLoc:    tileLoc,
+			attributes: attributes,
+		})
 
-		spriteCount++
-		if spriteCount > 10 {
+		if len(spritesOnLine) >= 10 {
 			break
 		}
+	}
 
-		yFlip := attributes&0x40 != 0
-		xFlip := attributes&0x20 != 0
-		priority := attributes&0x80 == 0
+	if len(spritesOnLine) == 0 {
+		return
+	}
 
-		line := int(scanline - spriteY)
+	// In DMG mode, priority is determined by smallest X coordinate (OAM index breaks ties)
+	if !isCGB {
+		sort.SliceStable(spritesOnLine, func(i, j int) bool {
+			if spritesOnLine[i].x != spritesOnLine[j].x {
+				return spritesOnLine[i].x < spritesOnLine[j].x
+			}
+			return spritesOnLine[i].index < spritesOnLine[j].index
+		})
+	}
+
+	var spriteDrawn [160]bool
+
+	for _, sp := range spritesOnLine {
+		yFlip := sp.attributes&0x40 != 0
+		xFlip := sp.attributes&0x20 != 0
+		priority := sp.attributes&0x80 == 0
+
+		line := scanline - sp.y
 		if yFlip {
-			line = int(ysize) - 1 - line
+			line = ysize - 1 - line
 		}
 		line *= 2
-		dataAddress := uint16(int(tileLoc)*16 + line)
+		dataAddress := uint16(int(sp.tileLoc)*16 + line)
 
 		var data1, data2 byte
 		if isCGB {
 			vramBank := byte(0)
-			if attributes&0x08 != 0 {
+			if sp.attributes&0x08 != 0 {
 				vramBank = 1
 			}
 			data1 = core.Memory.VRAMBanks[vramBank][dataAddress]
@@ -239,10 +291,19 @@ func (core *Core) RenderSprites(lcdControl byte) {
 			data2 = core.Memory.MainMemory[0x8000+dataAddress+1]
 		}
 
-		for tilePixel := 7; tilePixel >= 0; tilePixel-- {
-			colourbit := uint(tilePixel)
+		for tilePixel := 0; tilePixel < 8; tilePixel++ {
+			pixel := sp.x + tilePixel
+			if pixel < 0 || pixel >= 160 {
+				continue
+			}
+
+			if spriteDrawn[pixel] {
+				continue
+			}
+
+			colourbit := uint(7 - tilePixel)
 			if xFlip {
-				colourbit = uint(7 - tilePixel)
+				colourbit = uint(tilePixel)
 			}
 
 			colourNum := ((data2 >> colourbit) & 1) << 1
@@ -252,25 +313,30 @@ func (core *Core) RenderSprites(lcdControl byte) {
 				continue
 			}
 
-			pixel := int(spriteX) + (7 - tilePixel)
-			if pixel < 0 || pixel > 159 || scanline > 143 {
-				continue
-			}
+			spriteDrawn[pixel] = true
 
-			if isCGB && core.ScanLineBGPriority[pixel] {
-				continue
-			}
-			if !core.ScanLineBG[pixel] && !priority {
-				continue
+			if isCGB {
+				if bgMasterPriority {
+					if core.ScanLineBGPriority[pixel] {
+						continue
+					}
+					if !core.ScanLineBG[pixel] && !priority {
+						continue
+					}
+				}
+			} else {
+				if !core.ScanLineBG[pixel] && !priority {
+					continue
+				}
 			}
 
 			var c [3]uint8
 			if isCGB {
-				cgbPalette := attributes & 0x07
+				cgbPalette := sp.attributes & 0x07
 				c = core.Memory.SpritePaletteCache[cgbPalette][colourNum]
 			} else {
 				palAddr := uint16(0xFF48)
-				if attributes&0x10 != 0 {
+				if sp.attributes&0x10 != 0 {
 					palAddr = 0xFF49
 				}
 				palette := core.Memory.MainMemory[palAddr]

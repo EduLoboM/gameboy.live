@@ -90,3 +90,105 @@ func TestGraphics_RenderTiles_DMG(t *testing.T) {
 		t.Errorf("Rendered pixel color = %v; want %v", actualColor, expectedColor)
 	}
 }
+
+func TestGraphics_RenderSprites_CGB_Priority(t *testing.T) {
+	core := newTestCore()
+	core.IsCGB = true
+	core.Memory.MainMemory[0xFF40] = 0x82 // LCD on, Sprites on
+	core.Memory.MainMemory[0xFF44] = 0    // Scanline 0
+
+	// Set Sprite Palette 0 (color 1 = red) and Palette 1 (color 1 = blue)
+	core.Memory.SpritePaletteCache[0][1] = [3]uint8{255, 0, 0}
+	core.Memory.SpritePaletteCache[1][1] = [3]uint8{0, 0, 255}
+
+	// Tile 0 in VRAM Bank 0: row 0 has color 1 (data1 = 0xFF, data2 = 0x00)
+	core.Memory.VRAMBanks[0][0] = 0xFF
+	core.Memory.VRAMBanks[0][1] = 0x00
+
+	// Sprite 0 at (X=8, Y=16) -> Screen (0, 0), tile 0, palette 0
+	core.Memory.MainMemory[0xFE00] = 16 // Y
+	core.Memory.MainMemory[0xFE01] = 8  // X
+	core.Memory.MainMemory[0xFE02] = 0  // Tile 0
+	core.Memory.MainMemory[0xFE03] = 0  // Palette 0
+
+	// Sprite 1 at same location (X=8, Y=16), tile 0, palette 1 (blue)
+	core.Memory.MainMemory[0xFE04] = 16 // Y
+	core.Memory.MainMemory[0xFE05] = 8  // X
+	core.Memory.MainMemory[0xFE06] = 0  // Tile 0
+	core.Memory.MainMemory[0xFE07] = 1  // Palette 1
+
+	core.RenderSprites(core.Memory.MainMemory[0xFF40])
+
+	// In CGB mode, Sprite 0 has priority over Sprite 1; pixel (0,0) must be RED (palette 0)
+	actualColor := [3]uint8{core.Screen[0][0][0], core.Screen[0][0][1], core.Screen[0][0][2]}
+	expectedColor := [3]uint8{255, 0, 0}
+	if actualColor != expectedColor {
+		t.Errorf("CGB Sprite priority: got %v, want %v (Sprite 0 should not be overwritten by Sprite 1)", actualColor, expectedColor)
+	}
+}
+
+func TestGraphics_RenderSprites_NegativeCoordinates(t *testing.T) {
+	core := newTestCore()
+	core.IsCGB = true
+	core.Memory.MainMemory[0xFF40] = 0x82 // LCD on, Sprites on
+	core.Memory.MainMemory[0xFF44] = 0    // Scanline 0
+
+	// Set Sprite Palette 0 color 1 = green
+	core.Memory.SpritePaletteCache[0][1] = [3]uint8{0, 255, 0}
+
+	// Tile 0: all rows have color 1 (data1 = 0xFF, data2 = 0x00)
+	for i := 0; i < 16; i += 2 {
+		core.Memory.VRAMBanks[0][i] = 0xFF
+		core.Memory.VRAMBanks[0][i+1] = 0x00
+	}
+
+	// Sprite 0 at Y=10 (partially off-screen at top: spriteY = -6), X=4 (partially off-screen at left: spriteX = -4)
+	core.Memory.MainMemory[0xFE00] = 10 // Y = 10 - 16 = -6
+	core.Memory.MainMemory[0xFE01] = 4  // X = 4 - 8 = -4
+	core.Memory.MainMemory[0xFE02] = 0  // Tile 0
+	core.Memory.MainMemory[0xFE03] = 0  // Palette 0
+
+	core.RenderSprites(core.Memory.MainMemory[0xFF40])
+
+	// Screen pixel (0, 0) should be rendered with Sprite 0 color (pixel = -4 + 4 = 0)
+	actualColor := [3]uint8{core.Screen[0][0][0], core.Screen[0][0][1], core.Screen[0][0][2]}
+	expectedColor := [3]uint8{0, 255, 0}
+	if actualColor != expectedColor {
+		t.Errorf("Negative coordinate sprite: got %v, want %v", actualColor, expectedColor)
+	}
+}
+
+func TestGraphics_RenderSprites_DMG_XPriority(t *testing.T) {
+	core := newTestCore()
+	core.IsCGB = false
+	core.Memory.MainMemory[0xFF40] = 0x82 // LCD on, Sprites on
+	core.Memory.MainMemory[0xFF44] = 0    // Scanline 0
+	core.Memory.MainMemory[0xFF48] = 0xE4 // OBP0: 11 10 01 00 (Color 1 = dmgPalette[1])
+	core.Memory.MainMemory[0xFF49] = 0x1B // OBP1: 00 01 10 11 (Color 1 = dmgPalette[2])
+
+	// Tile 0: row 0 has color 1
+	core.Memory.MainMemory[0x8000] = 0xFF
+	core.Memory.MainMemory[0x8001] = 0x00
+
+	// Sprite 0 at (X=16, Y=16), OBP1
+	core.Memory.MainMemory[0xFE00] = 16 // Y
+	core.Memory.MainMemory[0xFE01] = 16 // X = 8 on screen
+	core.Memory.MainMemory[0xFE02] = 0  // Tile 0
+	core.Memory.MainMemory[0xFE03] = 0x10 // OBP1
+
+	// Sprite 1 at (X=12, Y=16), OBP0 -> X = 4 on screen, overlaps Sprite 0 at screen pixel 8
+	core.Memory.MainMemory[0xFE04] = 16 // Y
+	core.Memory.MainMemory[0xFE05] = 12 // X = 4 on screen
+	core.Memory.MainMemory[0xFE06] = 0  // Tile 0
+	core.Memory.MainMemory[0xFE07] = 0  // OBP0
+
+	core.RenderSprites(core.Memory.MainMemory[0xFF40])
+
+	// At screen pixel 8 (covered by both Sprite 1 tile pixel 4 and Sprite 0 tile pixel 0),
+	// Sprite 1 has smaller X (12 < 16) so Sprite 1 (OBP0 -> dmgPalette[1]) must win
+	actualColor := [3]uint8{core.Screen[8][0][0], core.Screen[8][0][1], core.Screen[8][0][2]}
+	expectedColor := dmgPalette[1]
+	if actualColor != expectedColor {
+		t.Errorf("DMG Sprite X priority: got %v, want %v", actualColor, expectedColor)
+	}
+}

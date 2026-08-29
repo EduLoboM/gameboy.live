@@ -351,3 +351,57 @@ func TestCartridgeSaveRam(t *testing.T) {
 		t.Errorf("loaded RAM mismatch: %v", loaded)
 	}
 }
+
+func TestInitRom_SmallSaveExpansion(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "cart_save_expansion_test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create dummy 3-byte save file (such as base64 "AAAA" decoded)
+	savePath := filepath.Join(tmpDir, "dummy.gbc.sav")
+	os.WriteFile(savePath, []byte{0x00, 0x00, 0x00}, 0644)
+
+	// Create dummy 32KB ROM with MBC3 + 32KB RAM (RAM size byte 0x149 = 0x03)
+	romPath := filepath.Join(tmpDir, "dummy.gbc")
+	rom := make([]byte, 0x8000)
+	rom[0x147] = 0x10 // MBC3+TIMER+RAM+BATTERY
+	rom[0x148] = 0x00 // 32KB ROM (2 banks)
+	rom[0x149] = 0x03 // 32KB RAM (4 banks)
+	os.WriteFile(romPath, rom, 0644)
+
+	core := new(Core)
+	os.Setenv("SAVE_PATH", savePath)
+	defer os.Unsetenv("SAVE_PATH")
+
+	core.initRom(romPath)
+
+	// Verify MBC is created and RAMBank has full 32KB (0x8000 bytes)
+	mbc3, ok := core.Cartridge.MBC.(*MBC3)
+	if !ok {
+		t.Fatalf("MBC should be *MBC3")
+	}
+	if len(mbc3.RAMBank) != 0x8000 {
+		t.Errorf("RAMBank len = %d; want %d (32KB)", len(mbc3.RAMBank), 0x8000)
+	}
+
+	// Verify writing to RAM bank 1 (0xA100) works through core.WriteMemory
+	core.WriteMemory(0x0000, 0x0A) // Enable RAM
+	core.WriteMemory(0x4000, 0x01) // Select RAM bank 1
+	core.WriteMemory(0xA100, 0x42) // Write byte
+
+	if val := core.ReadMemory(0xA100); val != 0x42 {
+		t.Errorf("ReadMemory(0xA100) on expanded RAM = 0x%02X; want 0x42", val)
+	}
+
+	// Verify saving writes full 32KB to disk
+	core.SaveRAM()
+	written, err := os.ReadFile(savePath)
+	if err != nil {
+		t.Fatalf("failed to read save file: %v", err)
+	}
+	if len(written) != 0x8000 {
+		t.Errorf("saved RAM file len = %d; want %d (32KB)", len(written), 0x8000)
+	}
+}

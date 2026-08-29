@@ -362,13 +362,24 @@ func (core *Core) initRom(romPath string) {
 
 	romData := core.readRomFile(romPath)
 	ramData := core.readRamFile(core.RamPath)
+
 	// Calculate required RAM size based on RAM bank count
-	ramSize := 0x8000 // default 32KB
-	if ramData == nil {
-		ramData = make([]byte, ramSize)
-	} else {
-		ramSize = len(ramData)
+	ramBanks := uint8(0)
+	if len(romData) > 0x149 {
+		if banks, ok := RamBankMap[romData[0x149]]; ok {
+			ramBanks = banks
+		}
 	}
+	expectedRamSize := int(ramBanks) * 0x2000
+	if expectedRamSize == 0 {
+		expectedRamSize = 0x8000 // default 32KB for battery-backed MBC games
+	}
+
+	ramBuffer := make([]byte, expectedRamSize)
+	if len(ramData) > 0 {
+		copy(ramBuffer, ramData)
+	}
+	ramData = ramBuffer
 
 	/*
 		0134-0143 - Title

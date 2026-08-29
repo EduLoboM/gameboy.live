@@ -55,9 +55,10 @@ func (core *Core) SetLCDStatus() {
 		core.doHDMABlock()
 	}
 
+	wasCoincidence := status&0x04 != 0
 	if currentLine == core.Memory.MainMemory[0xFF45] {
 		status |= 0x04
-		if status&0x40 != 0 {
+		if !wasCoincidence && (status&0x40 != 0) {
 			core.RequestInterrupt(1)
 		}
 	} else {

@@ -122,6 +122,8 @@ func (core *Core) ReadMemory(address uint16) byte {
 			return core.Memory.WRAMBanks[bank][address-0xD000]
 		}
 		return core.Memory.MainMemory[address]
+	case address <= 0xFDFF:
+		return core.ReadMemory(address - 0x2000)
 	case address == 0xFF00:
 		return core.GetJoypadStatus()
 	case address == 0xFF01:
@@ -254,13 +256,15 @@ func (core *Core) doHDMA(data byte) {
 
 	length := int((data&0x7F)+1) * 16
 
-	if data&0x80 == 0 {
+	if data&0x80 == 0 || !core.IsLCDEnabled() {
 		src := core.Memory.HDMASource
-		dst := core.Memory.HDMADest | 0x8000
+		dst := (core.Memory.HDMADest & 0x1FFF) | 0x8000
 		for i := 0; i < length; i++ {
 			b := core.ReadMemory(src + uint16(i))
 			core.WriteMemory(dst+uint16(i), b)
 		}
+		core.Memory.HDMASource += uint16(length)
+		core.Memory.HDMADest = (core.Memory.HDMADest + uint16(length)) & 0x1FFF
 		core.Memory.HDMAActive = false
 		core.Memory.HDMALength = 0xFF
 	} else {
@@ -276,7 +280,7 @@ func (core *Core) doHDMABlock() {
 	}
 
 	src := core.Memory.HDMASource
-	dst := core.Memory.HDMADest | 0x8000
+	dst := (core.Memory.HDMADest & 0x1FFF) | 0x8000
 
 	for i := 0; i < 16; i++ {
 		b := core.ReadMemory(src + uint16(i))
@@ -284,7 +288,7 @@ func (core *Core) doHDMABlock() {
 	}
 
 	core.Memory.HDMASource += 16
-	core.Memory.HDMADest += 16
+	core.Memory.HDMADest = (core.Memory.HDMADest + 16) & 0x1FFF
 	core.Memory.HDMARemaining -= 16
 
 	if core.Memory.HDMARemaining <= 0 {

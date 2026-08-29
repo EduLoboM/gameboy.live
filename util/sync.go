@@ -177,6 +177,10 @@ func DownloadSaveFromGist(gist, token, filename, targetPath string) error {
 		return fmt.Errorf("no save content found in Gist %s for file %s", gist, filename)
 	}
 
+	if len(saveBytes) <= 4 && bytes.Equal(saveBytes, make([]byte, len(saveBytes))) {
+		return fmt.Errorf("gist content in %s for file %s is an empty placeholder (%d bytes), skipping restore", gist, filename, len(saveBytes))
+	}
+
 	return os.WriteFile(targetPath, saveBytes, 0644)
 }
 
