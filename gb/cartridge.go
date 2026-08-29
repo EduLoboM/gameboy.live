@@ -636,7 +636,7 @@ func (mbc *MBC3) SaveRam(path string) {
 
 func (mbc *MBC3) Tick(cycles int) {
 	mbc.rtcCycles += cycles
-	if mbc.rtcCycles >= 4194304 {
+	for mbc.rtcCycles >= 4194304 {
 		mbc.rtcCycles -= 4194304
 		if len(mbc.rtc) >= 13 && (mbc.rtc[0x0C]&0x40 == 0) { // Halt flag is bit 6
 			mbc.rtc[0x08]++ // Seconds
